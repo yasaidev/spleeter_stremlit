@@ -5,13 +5,17 @@ description = ""
 authors = ["ryo <3955027+yasaidev@users.noreply.github.com>"]
 
 [tool.poetry.dependencies]
-python = ">3.7, <3.10"
+python = ">=3.8, <3.10"
 Markdown = "3.3.4"
 streamlit = "^1.7.0"
 spleeter = "^2.3.0"
+youtube_dl = "^2021.12.17"
+streamlit-aggrid = "^0.2.3"
 
 [tool.poetry.dev-dependencies]
 pytest = "^5.2"
+autopep8 = "^1.6.0"
+flake8 = "^4.0.1"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
