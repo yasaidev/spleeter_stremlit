@@ -11,6 +11,7 @@ streamlit = "^1.7.0"
 spleeter = "^2.3.0"
 youtube_dl = "^2021.12.17"
 streamlit-aggrid = "^0.2.3"
+ffmpeg-python = "^0.2.0"
 
 [tool.poetry.dev-dependencies]
 pytest = "^5.2"

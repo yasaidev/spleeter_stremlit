@@ -156,3 +156,6 @@ output/
 
 # pretrained models
 pretrained_models/
+
+# uploads
+upload_files/
