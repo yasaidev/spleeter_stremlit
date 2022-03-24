@@ -7,7 +7,8 @@ from spleeter.separator import Codec
 
 from utils import (ProcessingMode, SpleeterMode, SpleeterSettings,
                    download_youtube_as_mp3, get_audio_separated_zip,
-                   get_multi_audio_separated_zip, get_split_audio)
+                   get_multi_audio_separated_zip, get_split_audio,
+                   get_title_from_youtube_url)
 
 # global variables
 UPLOAD_DIR = Path("./upload_files/")
@@ -81,16 +82,18 @@ def youtube_dl_wrapper(url, bitrate):
     if(url == ""):
         st.warning("Please enter a valid url")
     else:
-        st.info("Downloading...")
-        file_name, is_exist = download_youtube_as_mp3(url, UPLOAD_DIR, bitrate)
-        file_path = Path(file_name)
-        # check if already uploaded in audio_file
-        if(is_exist):
-            st.warning("File already downloaded")
-            add_audio_files(file_name)
-        else:
-            st.success("File downloaded successfully")
-            add_audio_files(file_name)
+        with st.spinner(f'Downloading {get_title_from_youtube_url(url)}...'):
+            progress = st.progress(0)
+            file_name, is_exist = download_youtube_as_mp3(
+                url, UPLOAD_DIR, progress.progress, bitrate)
+
+            # check if already uploaded in audio_file
+            if(is_exist):
+                st.warning("File already downloaded")
+                add_audio_files(file_name)
+            else:
+                st.success("File downloaded successfully")
+                add_audio_files(file_name)
 
 
 with st.sidebar.form("youtube_dl_form"):

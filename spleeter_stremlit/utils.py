@@ -1,5 +1,6 @@
 import hashlib
 import os
+import re
 import shutil
 import zipfile
 from dataclasses import dataclass
@@ -66,37 +67,119 @@ class SpleeterSettings:
     duration: int = 600
 
 
-def download_youtube_as_mp3(youtube_url: str, output_path: Path, bit_rate: int = 192) -> Tuple[Path, bool]:
+def get_title_from_youtube_url(youtube_url: str) -> str:
+    """
+    Get title from youtube url
+    Args:
+        youtube_url: str: youtube url
+    Returns:
+        str: title
+    """
+    # check if youtube url is playlist
+    if youtube_url.startswith("https://www.youtube.com/playlist?list="):
+        return "playlist: " + youtube_dl.YoutubeDL({}).extract_info(
+            youtube_url, download=False)["title"]
+    # check if youtube url is video in playlist
+    elif(re.search(r'watch\?v=.*\&list=', youtube_url)):
+        return youtube_dl.YoutubeDL({}).extract_info(
+            youtube_url, download=False,)["entries"][0]["title"]
+    # check if youtube url is video
+    else:
+        return youtube_dl.YoutubeDL({}).extract_info(
+            youtube_url, download=False)["title"]
+
+
+def strip_ansi_escape_codes(s):
+    ansi_escape = re.compile(r'\x1b[^m]*m')
+    return ansi_escape.sub('', s)
+
+
+def youtube_dl_percent_str_to_float(percent_str: str, num: int = 1) -> float:
+    """
+    Convert youtube-dl percent string to float
+    Args:
+        percent_str: str: youtube-dl percent string
+    Returns:
+        float: float
+    """
+    return float(strip_ansi_escape_codes(percent_str).replace('%', '').strip())/(100.0*num)
+
+
+@dataclass
+class YoutubeItemData:
+    title: str
+    url: str
+
+
+def download_youtube_as_mp3(youtube_url: str, output_path: Path,
+                            progress_callback: Callable[[float], None],
+                            bit_rate: int = 192, ) -> Tuple[Path, bool]:
     """
     Download youtube video as mp3
     Args:
         youtube_url: str: youtube url
         output_path: Path: output path
+        progress_callback: Callable[[float], None]: progress callback
     Returns:
         Tuple[bool, str]: (is_exist, output_file_path)
     """
-    youtube_title = youtube_dl.YoutubeDL({}).extract_info(
-        youtube_url, download=False)["title"]
+    youtube_item_list: List[YoutubeItemData]
+
+    # check if youtube url is playlist
+    if youtube_url.startswith("https://www.youtube.com/playlist?list="):
+        playlist_info = youtube_dl.YoutubeDL({}).extract_info(
+            youtube_url, download=False)["entries"]
+        youtube_title_list = [
+            YoutubeItemData(
+                title=playlist_info[i]["title"],
+                url=playlist_info[i]["webpage_url"]
+            ) for i in range(len(playlist_info))
+        ]
+    # check if youtube url is video in playlist
+    elif(re.search(r'watch\?v=.*\&list=', youtube_url)):
+        # remove playlist id
+        youtube_url = re.sub(r'\&list=.*', '', youtube_url)
+        youtube_title_list = [
+            YoutubeItemData(
+                title=youtube_dl.YoutubeDL({}).extract_info(
+                    youtube_url, download=False,)["title"],
+                url=youtube_url
+            )]
+    # check if youtube url is video
+    else:
+        youtube_title_list = [
+            YoutubeItemData(
+                title=youtube_dl.YoutubeDL({}).extract_info(
+                    youtube_url, download=False,)["title"],
+                url=youtube_url
+            )]
 
     is_exist = True
+
+    def progress_hook(x): return progress_callback(
+        youtube_dl_percent_str_to_float(x["_percent_str"]))
+
+    ydl_opts = {
+        'format': 'bestaudio/best',
+        'outtmpl':  str(output_path.absolute()) + "/%(title)s.%(ext)s",
+        'progress_hooks': [progress_hook],
+        'postprocessors': [
+            {'key': 'FFmpegExtractAudio',
+             'preferredcodec': 'mp3',
+             'preferredquality': bit_rate},
+            {'key': 'FFmpegMetadata'},
+        ],
+    }
 
     # check if audio file already exists
     if not os.path.exists(output_path / f"{youtube_title}.mp3"):
         is_exist = False
-        ydl_opts = {
-            'format': 'bestaudio/best',
-            'outtmpl':  str(output_path.absolute()) + "/%(title)s.%(ext)s",
-            'postprocessors': [
-                {'key': 'FFmpegExtractAudio',
-                 'preferredcodec': 'mp3',
-                 'preferredquality': bit_rate},
-                {'key': 'FFmpegMetadata'},
-            ],
-        }
+
         with youtube_dl.YoutubeDL(ydl_opts) as ydl:
             ydl.download([youtube_url])
 
-    return output_path / f"{youtube_title}.mp3", is_exist
+    progress_callback(1.0)
+    return output_path / f"{youtube_title}.mp3"
 
 
 def get_split_audio(config: SpleeterSettings,
