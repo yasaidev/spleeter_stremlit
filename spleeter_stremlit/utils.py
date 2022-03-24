@@ -1,10 +1,13 @@
+import hashlib
 import os
 import shutil
+import zipfile
 from dataclasses import dataclass
 from enum import Enum
+from gc import callbacks
 from importlib.resources import path
 from pathlib import Path
-from typing import Generator, List, Tuple
+from typing import Callable, Generator, List, Tuple
 
 import youtube_dl
 from spleeter.separator import Codec, Separator
@@ -171,4 +174,71 @@ def get_audio_separated_zip(config: SpleeterSettings,
         shutil.make_archive(
             str(zip_file_basepath), 'zip', str(separated_audio_path_parent))
 
+    return zip_file_path
+
+# https://stackoverflow.com/questions/46229764/python-zip-multiple-directories-into-one-zip-file
+
+
+def zipdir(path: Path, ziph):
+    # ziph is zipfile handle
+    for root, dirs, files in os.walk(path):
+        for file in files:
+            ziph.write(os.path.join(root, file),
+                       os.path.relpath(os.path.join(root, file),
+                                       os.path.join(path, "..", "..")))
+
+
+def zipit(dir_list, zip_name):
+    zipf = zipfile.ZipFile(zip_name, 'w', zipfile.ZIP_DEFLATED)
+    for dir in dir_list:
+        zipdir(dir, zipf)
+    zipf.close()
+
+
+def get_multi_audio_separated_zip(config: SpleeterSettings,
+                                  audio_file_list: List[Path],
+                                  output_path: Path,
+                                  progress_callback: Callable[[float], None]) -> Path:
+    """
+    Get separated multiple audio into one zip file
+    Args:
+        audio_file_list: List[Path]: audio file path list
+        output_path: Path: audio file path
+        config: SpleeterSettings: spleeter settings
+        progress_callback: Callable[[None], float]: pass progress as float
+    Returns:
+        Path: separated audio zip file path (EX: output_path/5files-2stems_[filename's_hash].zip)
+    """
+    progress_max = float(len(audio_file_list)) + 1.0
+    progress_count = 0.0
+    progress_callback(0.0)
+    # get hash of audio file list from each filename
+    audio_file_list_hash = hashlib.sha256(
+        str(audio_file_list.sort()).encode()).hexdigest()[:6]
+
+    zip_file_basepath = Path(
+        output_path/f"{len(audio_file_list)}files-{config.split_mode.value.name}{'-16kHz' if config.use16kHZ else ''}_{audio_file_list_hash}")
+    zip_file_path = zip_file_basepath.parent / \
+        Path(zip_file_basepath.name + ".zip")
+
+    # check if separated audio zip file already exists
+    if os.path.exists(zip_file_path):
+        print(
+            f"{zip_file_path.name} : already zipped")
+
+    # get split audio path list and zip them
+    else:
+        separated_audio_parent_path_list = []
+        for audio_file in audio_file_list:
+            separated_audio_path_gen, is_exist_ = get_split_audio(
+                config, audio_file, output_path)
+            separated_audio_parent_path_list.append(
+                separated_audio_path_gen.__next__().parent)
+            progress_count += 1
+            progress_callback(progress_count/progress_max)
+
+        # zip all separated audio parent folder
+        zipit(separated_audio_parent_path_list, str(zip_file_path))
+
+    progress_callback(1.0)
     return zip_file_path

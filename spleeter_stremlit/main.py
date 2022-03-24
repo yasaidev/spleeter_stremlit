@@ -7,7 +7,7 @@ from spleeter.separator import Codec
 
 from utils import (ProcessingMode, SpleeterMode, SpleeterSettings,
                    download_youtube_as_mp3, get_audio_separated_zip,
-                   get_split_audio)
+                   get_multi_audio_separated_zip, get_split_audio)
 
 # global variables
 UPLOAD_DIR = Path("./upload_files/")
@@ -24,6 +24,8 @@ if 'spleeter_settings' not in st.session_state:
     st.session_state.spleeter_settings = None
 if 'selected_music_file' not in st.session_state:
     st.session_state.selected_music_file = None
+if 'selected_music_files' not in st.session_state:
+    st.session_state.selected_music_files = None
 # states updater -------------------------------------------------------------
 
 
@@ -115,16 +117,15 @@ st.title("Spleeter WEB UI")
 current_mode = st.selectbox(
     "Mode", ProcessingMode, format_func=lambda x: x.value)
 
+selected_music: Path
+select_stems: SpleeterMode
+select_codec: Codec
+select_bitrate: int
+output_files_generator: Generator[Path, None, None]
 
+# single file mode ------------------------------------------------------------
 if(current_mode == ProcessingMode.SINGLE):
-
-    selected_music: Path
-    select_stems: SpleeterMode
-    select_codec: Codec
-    select_bitrate: int
-    output_files_generator: Generator[Path, None, None]
-
-    with st.form("spleenter"):
+    with st.form("single_mode"):
         st.subheader("Mode: "+current_mode.value)
         selected_music = st.selectbox(
             "Select an audio file", st.session_state.audio_files, help="To select audio, you have to upload or download an audio file at least once",
@@ -169,7 +170,7 @@ if(current_mode == ProcessingMode.SINGLE):
                 st.session_state.output_files = []
                 with st.spinner('Wait for spleeter processing...'):
                     output_files_generator, is_exist = get_split_audio(
-                        current_settings,
+                        st.session_state.spleeter_settings,
                         selected_music,
                         OUTPUT_DIR)
                     for x in output_files_generator:
@@ -207,3 +208,83 @@ if(current_mode == ProcessingMode.SINGLE):
             for i, audio_file in enumerate(st.session_state.output_files):
                 st.caption(audio_file.name)
                 st.audio(str(audio_file))
+
+# multiple file mode -----------------------------------------------------------
+elif(current_mode == ProcessingMode.MULTIPLE):
+    with st.form("multiple_mode"):
+        st.subheader("Mode: "+current_mode.value)
+        selected_musics = st.multiselect(
+            "Select audio files", st.session_state.audio_files, help="To select audio, you have to upload or download an audio file at least once", default=st.session_state.audio_files, format_func=lambda x: x.name)
+
+        select_stems = st.selectbox(
+            "Selected split mode", SpleeterMode, format_func=lambda x: x.value.label)
+
+        with st.expander("Detail Settings"):
+            col1, col2 = st.columns(2)
+            with col1:
+                st.subheader("Output audio settings")
+                select_codec = st.selectbox(
+                    "Codec", list(Codec), format_func=lambda x: x.value, index=1)
+                select_bitrate = st.slider(
+                    "Bitrate", 1, 512, 192)
+            with col2:
+                st.subheader("Spleetor processing settings")
+                use_mwf: bool = st.checkbox(
+                    "Use multi-channel Wiener filtering", value=True, help="Use multi-channel Wiener filtering to improve the quality of the output audio, but this may increase the processing time")
+                use_16kHz: bool = st.checkbox(
+                    "Use 16kHz model (instead of 11kHz)", value=True, help="Use 16kHz model is better for high quality audio than 11kHz, but it may increase the processing time")
+                duaration_minutes: int = st.slider(
+                    "Max duration minutes", 0, 60, 10, help="Max duration minutes of the audio to be processed. If the audio is longer than the duration, the audio will be ignored.")
+
+        if st.form_submit_button("Split"):
+            # check if settings are selected:
+            if(len(selected_musics) == 0 or select_stems == None):
+                st.error("Please select audio files.")
+
+            else:
+                current_settings = SpleeterSettings(
+                    select_stems,
+                    select_codec,
+                    select_bitrate,
+                    use_mwf,
+                    use_16kHz,
+                    duaration_minutes*60
+                )
+                st.session_state.spleeter_settings = current_settings
+                st.session_state.selected_music_files = selected_musics
+                st.session_state.output_files = []
+                with st.spinner('Wait for spleeter processing...'):
+                    progress = st.progress(0)
+                    output_zip_path = get_multi_audio_separated_zip(
+                        st.session_state.spleeter_settings,
+                        selected_musics,
+                        OUTPUT_DIR,
+                        progress_callback=progress.progress)
+                st.success("Done!")
+
+    with st.container():
+        st.subheader("Output")
+        if(bool(st.session_state.selected_music_files)):
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.caption("Selected Audio files:")
+                # show as st table
+                st.table([str(x.name)
+                         for x in st.session_state.selected_music_files])
+            with col2:
+                st.caption("Mode:")
+                st.write(
+                    f"{select_stems.value.name}{'-16kHz' if use_16kHz else '-11kHz'}{'-mwf' if use_mwf else '-no-mwf'}")
+            with col3:
+                st.caption("Zip:")
+                output_zip_path = get_multi_audio_separated_zip(
+                    st.session_state.spleeter_settings,
+                    selected_musics,
+                    OUTPUT_DIR,
+                    progress_callback=lambda x: x)
+                with open(output_zip_path, 'rb') as f:
+                    st.download_button(
+                        label="Download",
+                        data=f,
+                        file_name=output_zip_path.name,
+                    )
