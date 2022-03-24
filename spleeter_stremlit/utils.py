@@ -9,7 +9,7 @@ from importlib.resources import path
 from pathlib import Path
 from typing import Callable, Generator, List, Tuple
 
-import youtube_dl
+import yt_dlp as youtube_dl
 from spleeter.separator import Codec, Separator
 
 
@@ -66,7 +66,7 @@ class SpleeterSettings:
     duration: int = 600
 
 
-def download_youtube_as_mp3(youtube_url: str, output_path: Path) -> Tuple[Path, bool]:
+def download_youtube_as_mp3(youtube_url: str, output_path: Path, bit_rate: int = 192) -> Tuple[Path, bool]:
     """
     Download youtube video as mp3
     Args:
@@ -89,7 +89,7 @@ def download_youtube_as_mp3(youtube_url: str, output_path: Path) -> Tuple[Path, 
             'postprocessors': [
                 {'key': 'FFmpegExtractAudio',
                  'preferredcodec': 'mp3',
-                 'preferredquality': '192'},
+                 'preferredquality': bit_rate},
                 {'key': 'FFmpegMetadata'},
             ],
         }

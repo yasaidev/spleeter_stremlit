@@ -77,12 +77,12 @@ st.sidebar.write("""
 """)
 
 
-def youtube_dl_wrapper(url):
+def youtube_dl_wrapper(url, bitrate):
     if(url == ""):
         st.warning("Please enter a valid url")
     else:
         st.info("Downloading...")
-        file_name, is_exist = download_youtube_as_mp3(url, UPLOAD_DIR)
+        file_name, is_exist = download_youtube_as_mp3(url, UPLOAD_DIR, bitrate)
         file_path = Path(file_name)
         # check if already uploaded in audio_file
         if(is_exist):
@@ -99,7 +99,7 @@ with st.sidebar.form("youtube_dl_form"):
     # Every form must have a submit button.
     submitted = st.form_submit_button("Download")
     if submitted:
-        youtube_dl_wrapper(youtube_url)
+        youtube_dl_wrapper(youtube_url, quality_val)
 
 st.sidebar.write("# Reload already uploaded audio files")
 if st.sidebar.button("Reload"):
