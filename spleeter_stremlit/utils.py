@@ -94,7 +94,7 @@ def strip_ansi_escape_codes(s):
     return ansi_escape.sub('', s)
 
 
-def youtube_dl_percent_str_to_float(percent_str: str, num: int = 1) -> float:
+def youtube_dl_percent_str_to_float(percent_str: str) -> float:
     """
     Convert youtube-dl percent string to float
     Args:
@@ -102,7 +102,7 @@ def youtube_dl_percent_str_to_float(percent_str: str, num: int = 1) -> float:
     Returns:
         float: float
     """
-    return float(strip_ansi_escape_codes(percent_str).replace('%', '').strip())/(100.0*num)
+    return float(strip_ansi_escape_codes(percent_str).replace('%', '').strip())/100
 
 
 @dataclass
@@ -111,9 +111,19 @@ class YoutubeItemData:
     url: str
 
 
+def progress_float_formatter(hookdata, current_num=1, total_num=1):
+    progress = (youtube_dl_percent_str_to_float(
+        hookdata["_percent_str"])+100*(current_num-1))/(total_num*100)
+
+    if progress > 1.0:
+        return 1
+    else:
+        return progress
+
+
 def download_youtube_as_mp3(youtube_url: str, output_path: Path,
                             progress_callback: Callable[[float], None],
-                            bit_rate: int = 192, ) -> Tuple[Path, bool]:
+                            bit_rate: int = 192, ) -> List[Path]:
     """
     Download youtube video as mp3
     Args:
@@ -153,11 +163,11 @@ def download_youtube_as_mp3(youtube_url: str, output_path: Path,
                     youtube_url, download=False,)["title"],
                 url=youtube_url
             )]
-
-    is_exist = True
+    current_num = 1
 
     def progress_hook(x): return progress_callback(
-        youtube_dl_percent_str_to_float(x["_percent_str"]))
+        youtube_dl_percent_str_to_float(x["_percent_str"])
+    )
 
     ydl_opts = {
         'format': 'bestaudio/best',
@@ -171,15 +181,15 @@ def download_youtube_as_mp3(youtube_url: str, output_path: Path,
         ],
     }
 
-    # check if audio file already exists
-    if not os.path.exists(output_path / f"{youtube_title}.mp3"):
-        is_exist = False
-
-        with youtube_dl.YoutubeDL(ydl_opts) as ydl:
-            ydl.download([youtube_url])
+    with youtube_dl.YoutubeDL(ydl_opts) as ydl:
+        for youtube_item in youtube_title_list:
+            current_num += 1
+            if os.path.exists(output_path / f"{youtube_item.title}.mp3"):
+                continue
+            ydl.download([youtube_item.url])
 
     progress_callback(1.0)
-    return output_path / f"{youtube_title}.mp3"
+    return [output_path / f"{youtube_item.title}.mp3" for youtube_item in youtube_title_list]
 
 
 def get_split_audio(config: SpleeterSettings,

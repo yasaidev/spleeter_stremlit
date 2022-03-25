@@ -84,20 +84,14 @@ def youtube_dl_wrapper(url, bitrate):
     else:
         with st.spinner(f'Downloading {get_title_from_youtube_url(url)}...'):
             progress = st.progress(0)
-            file_name, is_exist = download_youtube_as_mp3(
+            file_list = download_youtube_as_mp3(
                 url, UPLOAD_DIR, progress.progress, bitrate)
-
-            # check if already uploaded in audio_file
-            if(is_exist):
-                st.warning("File already downloaded")
-                add_audio_files(file_name)
-            else:
-                st.success("File downloaded successfully")
-                add_audio_files(file_name)
+            for file in file_list:
+                add_audio_files(file)
 
 
 with st.sidebar.form("youtube_dl_form"):
-    youtube_url = st.text_input("Enter a youtube url", "")
+    youtube_url = st.text_input("Enter a youtube url (playlist or video)", "")
     quality_val = st.slider("Bitrate", 1, 512, 192)
     # Every form must have a submit button.
     submitted = st.form_submit_button("Download")
